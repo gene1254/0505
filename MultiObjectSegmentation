@@ -1,0 +1,78 @@
+import java.awt.Color;
+import java.awt.image.BufferedImage;
+import java.io.File;
+import javax.imageio.ImageIO;
+import javax.swing.JFileChooser;
+import javax.swing.filechooser.FileNameExtensionFilter;
+
+public class MultiObjectSegmentation {
+
+    public static void main(String[] args) {
+        try {
+            // 1. 開啟檔案選擇器讀取原始圖片
+            JFileChooser fileChooser = new JFileChooser();
+            fileChooser.setDialogTitle("請選擇原始圖片");
+            fileChooser.setFileFilter(new FileNameExtensionFilter("圖片檔案", "jpg", "png"));
+
+            if (fileChooser.showOpenDialog(null) == JFileChooser.APPROVE_OPTION) {
+                File inputFile = fileChooser.getSelectedFile();
+                BufferedImage sourceImage = ImageIO.read(inputFile);
+                
+                // 2. 執行多重門檻分割處理
+                BufferedImage resultImage = processMultiThreshold(sourceImage);
+
+                // 3. 儲存分割後的結果圖
+                JFileChooser saveChooser = new JFileChooser();
+                saveChooser.setDialogTitle("儲存分割結果");
+                if (saveChooser.showSaveDialog(null) == JFileChooser.APPROVE_OPTION) {
+                    File outputFile = saveChooser.getSelectedFile();
+                    String path = outputFile.getAbsolutePath();
+                    if (!path.toLowerCase().endsWith(".png")) path += ".png";
+                    ImageIO.write(resultImage, "png", new File(path));
+                    System.out.println("分割完成！已區分不同顏色主體。");
+                }
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    /**
+     * 核心邏輯：應用多重門檻技術識別不同區域 [cite: 37, 39]
+     */
+    private static BufferedImage processMultiThreshold(BufferedImage src) {
+        int w = src.getWidth();
+        int h = src.getHeight();
+        BufferedImage out = new BufferedImage(w, h, BufferedImage.TYPE_INT_RGB);
+
+        // --- 根據直方圖分析設定的門檻值 [cite: 22] ---
+        // T1: 區分深色衣服(暗)與粉紅背景(中)
+        // T2: 區分粉紅背景(中)與白毛/白髮(亮)
+        int T1 = 145; 
+        int T2 = 190; 
+
+        for (int y = 0; y < h; y++) {
+            for (int x = 0; x < w; x++) {
+                Color c = new Color(src.getRGB(x, y));
+                
+                // 灰階亮度轉換公式 (Luminance)
+                int gray = (int)(c.getRed() * 0.299 + c.getGreen() * 0.587 + c.getBlue() * 0.114);
+
+                int finalColor;
+                if (gray < T1) {
+                    // 區間一：主體一 (老奶奶紅色毛衣、眼睛陰影) -> 設為紅色
+                    finalColor = Color.RED.getRGB();
+                } else if (gray <= T2) {
+                    // 區間二：背景區域 (粉紅色背景波峰區) -> 設為藍色 
+                    finalColor = Color.BLUE.getRGB();
+                } else {
+                    // 區間三：主體二 (小狗白毛、老奶奶白髮) -> 設為綠色
+                    // 只要亮度高於 T2，白毛就不會消失
+                    finalColor = Color.GREEN.getRGB();
+                }
+                out.setRGB(x, y, finalColor);
+            }
+        }
+        return out;
+    }
+}
